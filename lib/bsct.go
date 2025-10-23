@@ -151,20 +151,24 @@ func (b *InteractiveBisector) displayLineWithContext(idx int) {
 
 // AutomaticBisector performs bisection using a test command
 type AutomaticBisector struct {
-	lines       []string
-	goodIdx     int
-	badIdx      int
-	steps       int
-	testCommand string
+	lines         []string
+	goodIdx       int
+	badIdx        int
+	steps         int
+	testCommand   string
+	beforeCommand string
+	afterCommand  string
 }
 
 // NewAutomaticBisector creates a new automatic bisector
-func NewAutomaticBisector(lines []string, goodIdx, badIdx int, testCommand string) *AutomaticBisector {
+func NewAutomaticBisector(lines []string, goodIdx, badIdx int, testCommand, beforeCommand, afterCommand string) *AutomaticBisector {
 	return &AutomaticBisector{
-		lines:       lines,
-		goodIdx:     goodIdx,
-		badIdx:      badIdx,
-		testCommand: testCommand,
+		lines:         lines,
+		goodIdx:       goodIdx,
+		badIdx:        badIdx,
+		testCommand:   testCommand,
+		beforeCommand: beforeCommand,
+		afterCommand:  afterCommand,
 	}
 }
 
@@ -199,10 +203,34 @@ func (b *AutomaticBisector) Bisect() (*Result, error) {
 		}
 		tmpFile.Close()
 
-		// Build command with placeholder substitution
-		cmdStr := b.buildCommand(tmpPath, b.lines[midIdx])
+		// Run before command if provided
+		if b.beforeCommand != "" {
+			beforeCmdStr := b.buildCommand(tmpPath, b.lines[midIdx], b.beforeCommand)
+			fmt.Printf("Running before command: %s\n", beforeCmdStr)
+			beforeCmd := exec.Command("sh", "-c", beforeCmdStr)
+			beforeCmd.Stdout = os.Stdout
+			beforeCmd.Stderr = os.Stderr
+			if err := beforeCmd.Run(); err != nil {
+				fmt.Printf("Warning: before command failed: %v\n", err)
+			}
+		}
+
+		// Build and run test command with placeholder substitution
+		cmdStr := b.buildCommand(tmpPath, b.lines[midIdx], b.testCommand)
 		cmd := exec.Command("sh", "-c", cmdStr)
 		err = cmd.Run()
+
+		// Run after command if provided
+		if b.afterCommand != "" {
+			afterCmdStr := b.buildCommand(tmpPath, b.lines[midIdx], b.afterCommand)
+			fmt.Printf("Running after command: %s\n", afterCmdStr)
+			afterCmd := exec.Command("sh", "-c", afterCmdStr)
+			afterCmd.Stdout = os.Stdout
+			afterCmd.Stderr = os.Stderr
+			if afterErr := afterCmd.Run(); afterErr != nil {
+				fmt.Printf("Warning: after command failed: %v\n", afterErr)
+			}
+		}
 
 		if err == nil {
 			// Exit code 0 means good
@@ -226,8 +254,8 @@ func (b *AutomaticBisector) Bisect() (*Result, error) {
 // Supports:
 //   {} or {file} - replaced with the temp file path
 //   {line} - replaced with the current line content
-func (b *AutomaticBisector) buildCommand(filePath, lineContent string) string {
-	cmdStr := b.testCommand
+func (b *AutomaticBisector) buildCommand(filePath, lineContent, command string) string {
+	cmdStr := command
 
 	// Check if command contains placeholders
 	hasPlaceholder := strings.Contains(cmdStr, "{}")

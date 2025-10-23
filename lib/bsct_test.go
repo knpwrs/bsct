@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -110,7 +111,7 @@ exit 0
 	err = os.Chmod(tmpScript.Name(), 0755)
 	require.NoError(t, err)
 
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name())
+	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name(), "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -137,7 +138,7 @@ exit 0
 	err = os.Chmod(tmpScript.Name(), 0755)
 	require.NoError(t, err)
 
-	bisector := NewAutomaticBisector(lines, 0, 2, tmpScript.Name())
+	bisector := NewAutomaticBisector(lines, 0, 2, tmpScript.Name(), "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -174,7 +175,7 @@ exit 0
 	err = os.Chmod(tmpScript.Name(), 0755)
 	require.NoError(t, err)
 
-	bisector := NewAutomaticBisector(lines, 0, 15, tmpScript.Name())
+	bisector := NewAutomaticBisector(lines, 0, 15, tmpScript.Name(), "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -251,7 +252,7 @@ exit 0
 	err = os.Chmod(tmpScript.Name(), 0755)
 	require.NoError(t, err)
 
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name())
+	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name(), "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -300,7 +301,7 @@ exit 0
 	require.NoError(t, err)
 
 	// Use {line} placeholder to pass line content to the script
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {line}")
+	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {line}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -330,7 +331,7 @@ exit 0
 	require.NoError(t, err)
 
 	// Use {file} placeholder explicitly
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {file}")
+	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {file}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -360,7 +361,7 @@ exit 0
 	require.NoError(t, err)
 
 	// Use {} placeholder
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {}")
+	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -393,12 +394,60 @@ exit 0
 	require.NoError(t, err)
 
 	// Use both {file} and {line} placeholders
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {file} {line}")
+	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {file} {line}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
 	assert.Equal(t, 3, result.BadLineNumber)
 	assert.Equal(t, "BAD_LINE", result.BadLineContent)
+}
+
+func TestAutomaticBisector_BeforeAfterHooks(t *testing.T) {
+	lines := []string{"v1.0", "v2.0", "v3.0-bad", "v4.0"}
+
+	// Create a temp file to track hook execution
+	trackFile, err := os.CreateTemp("", "track-*.txt")
+	require.NoError(t, err)
+	trackPath := trackFile.Name()
+	trackFile.Close()
+	defer os.Remove(trackPath)
+
+	// Create test script
+	script := `#!/bin/bash
+if echo "$1" | grep -q "bad"; then
+  exit 1
+fi
+exit 0
+`
+	tmpScript, err := os.CreateTemp("", "test-*.sh")
+	require.NoError(t, err)
+	defer os.Remove(tmpScript.Name())
+
+	_, err = tmpScript.WriteString(script)
+	require.NoError(t, err)
+	tmpScript.Close()
+
+	err = os.Chmod(tmpScript.Name(), 0755)
+	require.NoError(t, err)
+
+	// Use before/after hooks to track execution
+	beforeCmd := fmt.Sprintf("echo 'BEFORE:{line}' >> %s", trackPath)
+	afterCmd := fmt.Sprintf("echo 'AFTER:{line}' >> %s", trackPath)
+	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {line}", beforeCmd, afterCmd)
+
+	result, err := bisector.Bisect()
+	require.NoError(t, err)
+	assert.Equal(t, 3, result.BadLineNumber)
+	assert.Equal(t, "v3.0-bad", result.BadLineContent)
+
+	// Verify hooks were executed
+	trackContent, err := os.ReadFile(trackPath)
+	require.NoError(t, err)
+	trackStr := string(trackContent)
+
+	// Should have before and after for each test
+	assert.Contains(t, trackStr, "BEFORE:")
+	assert.Contains(t, trackStr, "AFTER:")
 }
 
 // TestMain ensures test scripts are executable

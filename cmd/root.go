@@ -11,9 +11,11 @@ import (
 )
 
 var (
-	goodPattern string
-	badPattern  string
-	testCommand string
+	goodPattern   string
+	badPattern    string
+	testCommand   string
+	beforeCommand string
+	afterCommand  string
 )
 
 var rootCmd = &cobra.Command{
@@ -30,9 +32,13 @@ By default, the first line is assumed good and the last line is assumed bad.
 Use --good and --bad flags to specify content patterns for automatic boundary detection.
 Use --test to run a command automatically instead of interactive prompts.
 
-The --test command supports placeholders:
+Placeholders (supported in --test, --before, and --after):
   {file} or {} - replaced with temp file path (lines 1 through test line)
-  {line} - replaced with the current line content being tested`,
+  {line} - replaced with the current line content being tested
+
+Hooks:
+  --before - runs before each test (useful for setup steps)
+  --after - runs after each test (useful for cleanup steps)`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: run,
 }
@@ -45,6 +51,8 @@ func init() {
 	rootCmd.Flags().StringVar(&goodPattern, "good", "", "Content pattern to identify a known good line")
 	rootCmd.Flags().StringVar(&badPattern, "bad", "", "Content pattern to identify a known bad line")
 	rootCmd.Flags().StringVar(&testCommand, "test", "", "Command to run for automatic testing (exit 0 = good, non-zero = bad). Supports {file}, {}, and {line} placeholders")
+	rootCmd.Flags().StringVar(&beforeCommand, "before", "", "Command to run before each test (useful for setup). Supports {file}, {}, and {line} placeholders")
+	rootCmd.Flags().StringVar(&afterCommand, "after", "", "Command to run after each test (useful for cleanup). Supports {file}, {}, and {line} placeholders")
 }
 
 func run(cmd *cobra.Command, args []string) error {
@@ -67,7 +75,7 @@ func run(cmd *cobra.Command, args []string) error {
 	// Create bisector
 	var bisector lib.Bisector
 	if testCommand != "" {
-		bisector = lib.NewAutomaticBisector(lines, goodIdx, badIdx, testCommand)
+		bisector = lib.NewAutomaticBisector(lines, goodIdx, badIdx, testCommand, beforeCommand, afterCommand)
 	} else {
 		bisector = lib.NewInteractiveBisector(lines, goodIdx, badIdx, usingStdin)
 	}

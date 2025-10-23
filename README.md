@@ -124,6 +124,20 @@ bsct input.txt --good "SUCCESS" --bad "FATAL"
 
 This finds the first line containing "SUCCESS" as the known good line and the first line containing "FATAL" as the known bad line, then bisects between them.
 
+### Setup and Cleanup Hooks
+
+Use `--before` and `--after` hooks for setup and cleanup steps:
+
+```bash
+# Install a package version before testing, cleanup after
+bsct versions.txt \
+  --before 'npm install package@{line}' \
+  --test 'npm test' \
+  --after 'npm uninstall package'
+```
+
+The `--before` command runs before each test (useful for installing dependencies, setting up state, etc.), and `--after` runs after each test (useful for cleanup). Both support the same placeholders as `--test`.
+
 ### Combining Flags
 
 ```bash
@@ -139,7 +153,27 @@ git log --oneline > commits.txt
 bsct commits.txt --test "git checkout \$(head -1 \$1 | cut -d' ' -f1) && make test"
 ```
 
-### Example 2: Finding When a Bug Was Introduced
+### Example 2: Finding Which npm Package Version Broke Tests
+
+Bisect through npm package versions to find which release introduced a breaking change:
+
+```bash
+npm view lodash versions --json | jq -r '.[]' | bsct \
+  --good "4.17.0" \
+  --bad "4.17.21" \
+  --before 'npm install lodash@{line}' \
+  --test 'npm test' \
+  --after 'npm uninstall lodash'
+```
+
+This example:
+- Gets all versions of the package using `npm view`
+- Pipes them to `bsct` for bisection
+- Installs each version before testing with `--before`
+- Runs your test suite to check if it passes
+- Cleans up after each test with `--after`
+
+### Example 3: Finding When a Bug Was Introduced
 
 Given a file with timestamped log entries:
 
@@ -147,7 +181,7 @@ Given a file with timestamped log entries:
 cat application.log | bsct --bad "NullPointerException"
 ```
 
-### Example 3: Binary Search Through Large Files
+### Example 4: Binary Search Through Large Files
 
 ```bash
 bsct large_dataset.csv --test "python validate_data.py"
