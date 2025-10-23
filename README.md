@@ -129,11 +129,10 @@ This finds the first line containing "SUCCESS" as the known good line and the fi
 Use `--before` and `--after` hooks for setup and cleanup steps:
 
 ```bash
-# Install a package version before testing, cleanup after
+# Install a package version before testing
 bsct versions.txt \
   --before 'npm install package@{line}' \
   --test 'npm test' \
-  --after 'npm uninstall package'
 ```
 
 The `--before` command runs before each test (useful for installing dependencies, setting up state, etc.), and `--after` runs after each test (useful for cleanup). Both support the same placeholders as `--test`.
@@ -163,15 +162,14 @@ npm view lodash versions --json | jq -r '.[]' | bsct \
   --bad "4.17.21" \
   --before 'npm install lodash@{line}' \
   --test 'npm test' \
-  --after 'npm uninstall lodash'
 ```
 
 This example:
+
 - Gets all versions of the package using `npm view`
 - Pipes them to `bsct` for bisection
 - Installs each version before testing with `--before`
 - Runs your test suite to check if it passes
-- Cleans up after each test with `--after`
 
 ### Example 3: Finding When a Bug Was Introduced
 
