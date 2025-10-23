@@ -207,7 +207,7 @@ func (b *AutomaticBisector) Bisect() (*Result, error) {
 		if b.beforeCommand != "" {
 			beforeCmdStr := b.buildCommand(tmpPath, b.lines[midIdx], b.beforeCommand)
 			fmt.Printf("Running before command: %s\n", beforeCmdStr)
-			beforeCmd := exec.Command("sh", "-c", beforeCmdStr)
+			beforeCmd := b.createCommand(beforeCmdStr)
 			beforeCmd.Stdout = os.Stdout
 			beforeCmd.Stderr = os.Stderr
 			if err := beforeCmd.Run(); err != nil {
@@ -217,14 +217,14 @@ func (b *AutomaticBisector) Bisect() (*Result, error) {
 
 		// Build and run test command with placeholder substitution
 		cmdStr := b.buildCommand(tmpPath, b.lines[midIdx], b.testCommand)
-		cmd := exec.Command("sh", "-c", cmdStr)
+		cmd := b.createCommand(cmdStr)
 		err = cmd.Run()
 
 		// Run after command if provided
 		if b.afterCommand != "" {
 			afterCmdStr := b.buildCommand(tmpPath, b.lines[midIdx], b.afterCommand)
 			fmt.Printf("Running after command: %s\n", afterCmdStr)
-			afterCmd := exec.Command("sh", "-c", afterCmdStr)
+			afterCmd := b.createCommand(afterCmdStr)
 			afterCmd.Stdout = os.Stdout
 			afterCmd.Stderr = os.Stderr
 			if afterErr := afterCmd.Run(); afterErr != nil {
@@ -248,6 +248,17 @@ func (b *AutomaticBisector) Bisect() (*Result, error) {
 		BadLineContent: b.lines[b.badIdx],
 		StepsTaken:     b.steps,
 	}, nil
+}
+
+// createCommand creates an exec.Cmd that works cross-platform
+func (b *AutomaticBisector) createCommand(cmdStr string) *exec.Cmd {
+	// On Windows, use cmd.exe /c, on Unix use sh -c
+	if os.PathSeparator == '\\' {
+		// Windows
+		return exec.Command("cmd", "/c", cmdStr)
+	}
+	// Unix
+	return exec.Command("sh", "-c", cmdStr)
 }
 
 // buildCommand constructs the command string with placeholder substitutions

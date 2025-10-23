@@ -5,12 +5,58 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// createTestScript creates a platform-specific test script
+func createTestScript(scriptLogic string) (string, func(), error) {
+	if runtime.GOOS == "windows" {
+		// Create a batch file for Windows
+		tmpScript, err := os.CreateTemp("", "test-*.bat")
+		if err != nil {
+			return "", nil, err
+		}
+
+		_, err = tmpScript.WriteString("@echo off\n" + scriptLogic)
+		if err != nil {
+			tmpScript.Close()
+			os.Remove(tmpScript.Name())
+			return "", nil, err
+		}
+		tmpScript.Close()
+
+		cleanup := func() { os.Remove(tmpScript.Name()) }
+		return tmpScript.Name(), cleanup, nil
+	}
+
+	// Create a bash script for Unix
+	tmpScript, err := os.CreateTemp("", "test-*.sh")
+	if err != nil {
+		return "", nil, err
+	}
+
+	_, err = tmpScript.WriteString("#!/bin/bash\n" + scriptLogic)
+	if err != nil {
+		tmpScript.Close()
+		os.Remove(tmpScript.Name())
+		return "", nil, err
+	}
+	tmpScript.Close()
+
+	err = os.Chmod(tmpScript.Name(), 0755)
+	if err != nil {
+		os.Remove(tmpScript.Name())
+		return "", nil, err
+	}
+
+	cleanup := func() { os.Remove(tmpScript.Name()) }
+	return tmpScript.Name(), cleanup, nil
+}
 
 func TestInteractiveBisector_SingleBadLine(t *testing.T) {
 	lines := []string{"good1", "good2", "bad"}
@@ -94,24 +140,23 @@ func TestAutomaticBisector_WithTestCommand(t *testing.T) {
 	lines := []string{"line1", "line2", "ERROR", "line4"}
 
 	// Create a test script that fails if file contains "ERROR"
-	script := `#!/bin/bash
-if grep -q "ERROR" "$1"; then
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `findstr /C:"ERROR" "%1" >nul
+if %errorlevel% equ 0 exit /b 1
+exit /b 0`
+	} else {
+		scriptLogic = `if grep -q "ERROR" "$1"; then
   exit 1
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
+	defer cleanup()
 
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
-
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name(), "", "")
+	bisector := NewAutomaticBisector(lines, 0, 3, scriptPath, "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -124,21 +169,18 @@ func TestAutomaticBisector_AllLinesPass(t *testing.T) {
 	lines := []string{"good1", "good2", "good3"}
 
 	// Create a test script that always passes
-	script := `#!/bin/bash
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = "exit /b 0"
+	} else {
+		scriptLogic = "exit 0"
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
+	defer cleanup()
 
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
-
-	bisector := NewAutomaticBisector(lines, 0, 2, tmpScript.Name(), "", "")
+	bisector := NewAutomaticBisector(lines, 0, 2, scriptPath, "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -158,24 +200,23 @@ func TestAutomaticBisector_CommandExecutionCount(t *testing.T) {
 	}
 
 	// Create a test script that fails on "bad"
-	script := `#!/bin/bash
-if grep -q "bad" "$1"; then
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `findstr /C:"bad" "%1" >nul
+if %errorlevel% equ 0 exit /b 1
+exit /b 0`
+	} else {
+		scriptLogic = `if grep -q "bad" "$1"; then
   exit 1
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
+	defer cleanup()
 
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
-
-	bisector := NewAutomaticBisector(lines, 0, 15, tmpScript.Name(), "", "")
+	bisector := NewAutomaticBisector(lines, 0, 15, scriptPath, "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -235,24 +276,23 @@ func TestAutomaticBisector_FileContent(t *testing.T) {
 	lines := []string{"line1", "line2", "line3", "line4"}
 
 	// Create a test script that checks if line3 is present
-	script := `#!/bin/bash
-if grep -q "line3" "$1"; then
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `findstr /C:"line3" "%1" >nul
+if %errorlevel% equ 0 exit /b 1
+exit /b 0`
+	} else {
+		scriptLogic = `if grep -q "line3" "$1"; then
   exit 1
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
+	defer cleanup()
 
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
-
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name(), "", "")
+	bisector := NewAutomaticBisector(lines, 0, 3, scriptPath, "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -283,25 +323,24 @@ func TestAutomaticBisector_LinePlaceholder(t *testing.T) {
 	lines := []string{"good line", "another good", "ERROR: bad line", "more bad"}
 
 	// Create a test script that checks if the line content contains "ERROR"
-	script := `#!/bin/bash
-if echo "$1" | grep -q "ERROR"; then
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `echo %1 | findstr /C:"ERROR" >nul
+if %errorlevel% equ 0 exit /b 1
+exit /b 0`
+	} else {
+		scriptLogic = `if echo "$1" | grep -q "ERROR"; then
   exit 1
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
-
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
+	defer cleanup()
 
 	// Use {line} placeholder to pass line content to the script
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {line}", "", "")
+	bisector := NewAutomaticBisector(lines, 0, 3, scriptPath+" {line}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -313,25 +352,24 @@ func TestAutomaticBisector_FilePlaceholder(t *testing.T) {
 	lines := []string{"line1", "line2", "ERROR", "line4"}
 
 	// Create a test script using explicit {file} placeholder
-	script := `#!/bin/bash
-if grep -q "ERROR" "$1"; then
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `findstr /C:"ERROR" "%1" >nul
+if %errorlevel% equ 0 exit /b 1
+exit /b 0`
+	} else {
+		scriptLogic = `if grep -q "ERROR" "$1"; then
   exit 1
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
-
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
+	defer cleanup()
 
 	// Use {file} placeholder explicitly
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {file}", "", "")
+	bisector := NewAutomaticBisector(lines, 0, 3, scriptPath+" {file}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -343,25 +381,24 @@ func TestAutomaticBisector_BracesPlaceholder(t *testing.T) {
 	lines := []string{"line1", "line2", "ERROR", "line4"}
 
 	// Create a test script using {} placeholder
-	script := `#!/bin/bash
-if grep -q "ERROR" "$1"; then
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `findstr /C:"ERROR" "%1" >nul
+if %errorlevel% equ 0 exit /b 1
+exit /b 0`
+	} else {
+		scriptLogic = `if grep -q "ERROR" "$1"; then
   exit 1
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
-
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
+	defer cleanup()
 
 	// Use {} placeholder
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {}", "", "")
+	bisector := NewAutomaticBisector(lines, 0, 3, scriptPath+" {}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -373,28 +410,30 @@ func TestAutomaticBisector_MixedPlaceholders(t *testing.T) {
 	lines := []string{"good", "still good", "BAD_LINE", "also bad"}
 
 	// Create a test script that uses both file and line content
-	script := `#!/bin/bash
-# Check if line contains "BAD" AND if file contains it
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `echo %2 | findstr /C:"BAD" >nul
+if %errorlevel% equ 0 (
+  findstr /C:"BAD" "%1" >nul
+  if %errorlevel% equ 0 exit /b 1
+)
+exit /b 0`
+	} else {
+		scriptLogic = `# Check if line contains "BAD" AND if file contains it
 if echo "$2" | grep -q "BAD"; then
   if grep -q "BAD" "$1"; then
     exit 1
   fi
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
-
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
+	defer cleanup()
 
 	// Use both {file} and {line} placeholders
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {file} {line}", "", "")
+	bisector := NewAutomaticBisector(lines, 0, 3, scriptPath+" {file} {line}", "", "")
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -413,27 +452,33 @@ func TestAutomaticBisector_BeforeAfterHooks(t *testing.T) {
 	defer os.Remove(trackPath)
 
 	// Create test script
-	script := `#!/bin/bash
-if echo "$1" | grep -q "bad"; then
+	var scriptLogic string
+	if runtime.GOOS == "windows" {
+		scriptLogic = `echo %1 | findstr /C:"bad" >nul
+if %errorlevel% equ 0 exit /b 1
+exit /b 0`
+	} else {
+		scriptLogic = `if echo "$1" | grep -q "bad"; then
   exit 1
 fi
-exit 0
-`
-	tmpScript, err := os.CreateTemp("", "test-*.sh")
-	require.NoError(t, err)
-	defer os.Remove(tmpScript.Name())
+exit 0`
+	}
 
-	_, err = tmpScript.WriteString(script)
+	scriptPath, cleanup, err := createTestScript(scriptLogic)
 	require.NoError(t, err)
-	tmpScript.Close()
-
-	err = os.Chmod(tmpScript.Name(), 0755)
-	require.NoError(t, err)
+	defer cleanup()
 
 	// Use before/after hooks to track execution
-	beforeCmd := fmt.Sprintf("echo 'BEFORE:{line}' >> %s", trackPath)
-	afterCmd := fmt.Sprintf("echo 'AFTER:{line}' >> %s", trackPath)
-	bisector := NewAutomaticBisector(lines, 0, 3, tmpScript.Name()+" {line}", beforeCmd, afterCmd)
+	var beforeCmd, afterCmd string
+	if runtime.GOOS == "windows" {
+		beforeCmd = fmt.Sprintf("echo BEFORE:{line} >> %s", trackPath)
+		afterCmd = fmt.Sprintf("echo AFTER:{line} >> %s", trackPath)
+	} else {
+		beforeCmd = fmt.Sprintf("echo 'BEFORE:{line}' >> %s", trackPath)
+		afterCmd = fmt.Sprintf("echo 'AFTER:{line}' >> %s", trackPath)
+	}
+
+	bisector := NewAutomaticBisector(lines, 0, 3, scriptPath+" {line}", beforeCmd, afterCmd)
 
 	result, err := bisector.Bisect()
 	require.NoError(t, err)
@@ -452,8 +497,14 @@ exit 0
 
 // TestMain ensures test scripts are executable
 func TestMain(m *testing.M) {
-	// Check if we can execute shell scripts
-	cmd := exec.Command("sh", "-c", "exit 0")
+	// Check if we can execute shell scripts/commands
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/c", "exit 0")
+	} else {
+		cmd = exec.Command("sh", "-c", "exit 0")
+	}
+
 	if err := cmd.Run(); err != nil {
 		panic("Cannot execute shell commands in test environment")
 	}
