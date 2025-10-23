@@ -6,6 +6,8 @@
 
 A CLI tool that interactively bisects input lines to find the first bad line, similar to `git bisect` but for text files or stdin.
 
+Pronounced biscuit.
+
 ## Installation
 
 ### Using eget (recommended)
