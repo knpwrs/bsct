@@ -10,7 +10,13 @@ Pronounced biscuit.
 
 ## Installation
 
-### Using eget (recommended)
+### Using Homebrew
+
+```bash
+brew install knpwrs/tap/bsct
+```
+
+### Using eget
 
 [eget](https://github.com/zyedidia/eget) makes it easy to install pre-built binaries:
 
