@@ -1,14 +1,30 @@
 # bsct - Bisect Text Lines
 
+[![Test](https://github.com/knpwrs/bsct/workflows/Test/badge.svg)](https://github.com/knpwrs/bsct/actions?query=workflow%3ATest)
+[![Release](https://github.com/knpwrs/bsct/workflows/Release/badge.svg)](https://github.com/knpwrs/bsct/actions?query=workflow%3ARelease)
+[![Go Report Card](https://goreportcard.com/badge/github.com/knpwrs/bsct)](https://goreportcard.com/report/github.com/knpwrs/bsct)
+
 A CLI tool that interactively bisects input lines to find the first bad line, similar to `git bisect` but for text files or stdin.
 
 ## Installation
+
+### Using eget (recommended)
+
+[eget](https://github.com/zyedidia/eget) makes it easy to install pre-built binaries:
+
+```bash
+eget knpwrs/bsct
+```
+
+### Using Go
 
 ```bash
 go install github.com/knpwrs/bsct@latest
 ```
 
-Or build from source:
+### Manual Installation
+
+Download the latest release from the [releases page](https://github.com/knpwrs/bsct/releases), or build from source:
 
 ```bash
 git clone https://github.com/knpwrs/bsct
