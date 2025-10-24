@@ -138,7 +138,7 @@ Use `--before` and `--after` hooks for setup and cleanup steps:
 # Install a package version before testing
 bsct versions.txt \
   --before 'npm install package@{line}' \
-  --test 'npm test' \
+  --test 'npm test'
 ```
 
 The `--before` command runs before each test (useful for installing dependencies, setting up state, etc.), and `--after` runs after each test (useful for cleanup). Both support the same placeholders as `--test`.
@@ -167,7 +167,7 @@ npm view lodash versions --json | jq -r '.[]' | bsct \
   --good "4.17.0" \
   --bad "4.17.21" \
   --before 'npm install lodash@{line}' \
-  --test 'npm test' \
+  --test 'npm test'
 ```
 
 This example:
